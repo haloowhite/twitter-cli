@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use reqwest::Client;
+use rquest::Client;
+use rquest_util::Emulation;
 use serde_json::{json, Value};
 
 use super::endpoints;
@@ -15,7 +16,8 @@ pub struct TwitterClient {
 impl TwitterClient {
     pub fn new(creds: Credentials) -> Result<Self> {
         let http = Client::builder()
-            .danger_accept_invalid_certs(true)
+            .emulation(Emulation::Chrome133)
+            .cookie_store(true)
             .build()
             .context("Failed to build HTTP client")?;
         Ok(Self { http, creds })
@@ -312,7 +314,7 @@ impl TwitterClient {
         self.graphql_get(
             endpoints::USER_BY_SCREEN_NAME,
             variables,
-            features::features_tweets(), // reuse basic features
+            features::features_tweets(),
             None,
         )
         .await

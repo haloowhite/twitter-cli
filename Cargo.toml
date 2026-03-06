@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-reqwest = { version = "0.12", features = ["json", "cookies"] }
 rookie = "0.5"
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
@@ -17,6 +16,8 @@ urlencoding = "2"
 chrono = "0.4"
 regex = "1"
 rand = "0.9"
+rquest = { version = "5.1.0", features = ["cookies", "json"] }
+rquest-util = "2.2.1"
 
 [profile.release]
 strip = true
