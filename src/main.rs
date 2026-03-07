@@ -154,6 +154,9 @@ enum Commands {
         /// Screen name (handle)
         screen_name: String,
     },
+
+    /// Get current authenticated user info
+    Me,
 }
 
 #[tokio::main]
@@ -174,7 +177,7 @@ async fn main() -> Result<()> {
         // All other commands require credentials
         cmd => {
             let creds = load_credentials()?;
-            let client = TwitterClient::new(creds)?;
+            let client = TwitterClient::new(creds).await?;
 
             match cmd {
                 Commands::Tweets { user_id, limit } => {
@@ -229,6 +232,9 @@ async fn main() -> Result<()> {
                 }
                 Commands::User { screen_name } => {
                     commands::users::lookup_user(&client, &screen_name).await?;
+                }
+                Commands::Me => {
+                    commands::users::get_me(&client).await?;
                 }
                 Commands::Auth { .. } => unreachable!(),
             }

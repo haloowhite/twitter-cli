@@ -30,3 +30,9 @@ pub async fn lookup_user(client: &TwitterClient, screen_name: &str) -> Result<()
     println!("{}", serde_json::to_string_pretty(&resp)?);
     Ok(())
 }
+
+pub async fn get_me(client: &TwitterClient) -> Result<()> {
+    let resp = client.get_me().await?;
+    println!("{}", serde_json::to_string_pretty(&resp)?);
+    Ok(())
+}

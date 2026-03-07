@@ -61,6 +61,11 @@ twitter-cli detail <tweet_id>
 twitter-cli detail <tweet_id> --context  # includes conversation thread
 ```
 
+### Get current authenticated user info
+```bash
+twitter-cli me
+```
+
 ### Look up user by handle
 ```bash
 twitter-cli user <screen_name>

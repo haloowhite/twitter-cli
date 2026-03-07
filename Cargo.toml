@@ -18,6 +18,8 @@ regex = "1"
 rand = "0.9"
 rquest = { version = "5.1.0", features = ["cookies", "json"] }
 rquest-util = "2.2.1"
+scraper = "0.25.0"
+sha2 = "0.10.9"
 
 [profile.release]
 strip = true
