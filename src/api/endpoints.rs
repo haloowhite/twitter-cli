@@ -7,7 +7,7 @@ pub const USER_TWEETS_AND_REPLIES: &str =
 pub const FOLLOWERS: &str = "https://x.com/i/api/graphql/ggGqWO5y_c4Iu58dyHnbzg/Followers";
 pub const FOLLOWING: &str = "https://x.com/i/api/graphql/NElglO5nnh78FWMvYQuwDw/Following";
 pub const SEARCH_TIMELINE: &str =
-    "https://x.com/i/api/graphql/NiZ1seU-Qm1TUiThEaWXKA/SearchTimeline";
+    "https://api.x.com/graphql/nWemVnGJ6A5eQAR5-oQeAg/SearchTimeline";
 pub const TWEET_RESULT_BY_REST_ID: &str =
     "https://x.com/i/api/graphql/u-HcuvGsZT0ZoxfFDQWNeg/TweetResultByRestId";
 pub const TWEET_DETAIL: &str =

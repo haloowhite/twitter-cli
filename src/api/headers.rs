@@ -2,7 +2,7 @@ use rquest::header::{HeaderMap, HeaderValue};
 
 pub const BEARER_TOKEN: &str = "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
 
-pub const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36";
+pub const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
 
 pub fn build_headers(csrf_token: &str) -> HeaderMap {
     let mut headers = HeaderMap::new();
@@ -20,18 +20,18 @@ pub fn build_headers(csrf_token: &str) -> HeaderMap {
     headers.insert(
         "sec-ch-ua",
         HeaderValue::from_static(
-            "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+            "\"Google Chrome\";v=\"136\", \"Chromium\";v=\"136\", \"Not.A/Brand\";v=\"99\"",
         ),
     );
     headers.insert("sec-ch-ua-arch", HeaderValue::from_static("\"arm\""));
     headers.insert("sec-ch-ua-bitness", HeaderValue::from_static("\"64\""));
     headers.insert(
         "sec-ch-ua-full-version",
-        HeaderValue::from_static("\"143.0.7499.170\""),
+        HeaderValue::from_static("\"136.0.7103.113\""),
     );
     headers.insert(
         "sec-ch-ua-full-version-list",
-        HeaderValue::from_static("\"Google Chrome\";v=\"143.0.7499.170\", \"Chromium\";v=\"143.0.7499.170\", \"Not A(Brand\";v=\"24.0.0.0\""),
+        HeaderValue::from_static("\"Google Chrome\";v=\"136.0.7103.113\", \"Chromium\";v=\"136.0.7103.113\", \"Not.A/Brand\";v=\"99.0.0.0\""),
     );
     headers.insert("sec-ch-ua-mobile", HeaderValue::from_static("?0"));
     headers.insert("sec-ch-ua-model", HeaderValue::from_static("\"\""));
