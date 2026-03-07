@@ -4,8 +4,10 @@ use rand::Rng;
 use regex::Regex;
 use rquest::Client;
 use rquest_util::Emulation;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::f64::consts::PI;
+use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -21,20 +23,95 @@ const HASH_KEYWORD: &str = "obfiowerehiring";
 const EPOCH_OFFSET_MS: u64 = 1682924400 * 1000;
 const TOTAL_ANIMATION_TIME: f64 = 4096.0;
 const RANDOM_SUFFIX: u8 = 3;
+const CACHE_TTL_SECS: u64 = 3600; // 1 hour
+
+#[derive(Serialize, Deserialize)]
+struct TransactionCache {
+    key_bytes: Vec<u8>,
+    animation_key: String,
+    created_at: u64,
+}
 
 pub struct ClientTransaction {
     key_bytes: Vec<u8>,
     animation_key: String,
-    row_index: usize,
+}
+
+fn cache_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".x-cli")
+        .join("transaction_cache.json")
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 impl ClientTransaction {
     pub async fn new() -> Result<Self> {
+        // Try loading from cache first
+        if let Ok(cached) = Self::load_cache() {
+            return Ok(cached);
+        }
+
+        // Fetch fresh data with retries
+        let ct = Self::fetch_fresh().await?;
+        ct.save_cache();
+        Ok(ct)
+    }
+
+    fn load_cache() -> Result<Self> {
+        let path = cache_path();
+        let content = std::fs::read_to_string(&path)
+            .context("No cache file")?;
+        let cache: TransactionCache = serde_json::from_str(&content)
+            .context("Invalid cache")?;
+
+        if now_secs() - cache.created_at > CACHE_TTL_SECS {
+            anyhow::bail!("Cache expired");
+        }
+
+        Ok(Self {
+            key_bytes: cache.key_bytes,
+            animation_key: cache.animation_key,
+        })
+    }
+
+    fn save_cache(&self) {
+        let cache = TransactionCache {
+            key_bytes: self.key_bytes.clone(),
+            animation_key: self.animation_key.clone(),
+            created_at: now_secs(),
+        };
+        if let Ok(json) = serde_json::to_string(&cache) {
+            let _ = std::fs::write(cache_path(), json);
+        }
+    }
+
+    async fn fetch_fresh() -> Result<Self> {
         let client = Client::builder()
-            .emulation(Emulation::Chrome133)
+            .emulation(Emulation::Chrome136)
             .build()
             .context("Failed to build HTTP client for transaction")?;
 
+        let mut last_err = None;
+        for attempt in 0..3 {
+            if attempt > 0 {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+            match Self::fetch_once(&client).await {
+                Ok(ct) => return Ok(ct),
+                Err(e) => last_err = Some(e),
+            }
+        }
+        Err(last_err.unwrap())
+    }
+
+    async fn fetch_once(client: &Client) -> Result<Self> {
         let home_html = client
             .get("https://x.com")
             .send()
@@ -46,14 +123,12 @@ impl ClientTransaction {
 
         let document = scraper::Html::parse_document(&home_html);
 
-        // Extract ondemand.s JS file hash
         let js_hash = ON_DEMAND_FILE_REGEX
             .captures(&home_html)
             .and_then(|c| c.get(1))
             .map(|m| m.as_str().to_string())
             .context("Could not find ondemand.s file reference")?;
 
-        // Download ondemand.s JS file and extract indices
         let js_url = format!(
             "https://abs.twimg.com/responsive-web/client-web/ondemand.s.{js_hash}a.js"
         );
@@ -77,7 +152,6 @@ impl ClientTransaction {
         let row_index = indices[0];
         let key_byte_indices: Vec<usize> = indices[1..].to_vec();
 
-        // Extract twitter-site-verification key
         let selector =
             scraper::Selector::parse("[name='twitter-site-verification']").unwrap();
         let key_b64 = document
@@ -90,14 +164,12 @@ impl ClientTransaction {
             .decode(key_b64)
             .context("Failed to decode verification key")?;
 
-        // Parse SVG animation frames
         let animation_key =
             compute_animation_key(&document, &key_bytes, row_index, &key_byte_indices)?;
 
         Ok(Self {
             key_bytes,
             animation_key,
-            row_index,
         })
     }
 
@@ -155,7 +227,6 @@ fn compute_animation_key(
         .product();
     let target_time = frame_time / TOTAL_ANIMATION_TIME;
 
-    // Get SVG animation frames
     let frame_selector =
         scraper::Selector::parse("[id^='loading-x-anim']").unwrap();
     let frames: Vec<_> = document.select(&frame_selector).collect();
@@ -169,11 +240,9 @@ fn compute_animation_key(
         .get(frame_index)
         .context("Frame index out of bounds")?;
 
-    // Get path d attribute from SVG
     let path_selector = scraper::Selector::parse("path").unwrap();
     let paths: Vec<_> = frame_el.select(&path_selector).collect();
 
-    // Get the second path element (index 1)
     let path_el = paths.get(1).or_else(|| paths.first()).context("No path element found")?;
 
     let d_attr = path_el
@@ -181,10 +250,8 @@ fn compute_animation_key(
         .attr("d")
         .context("No d attribute on path")?;
 
-    // Skip first 9 chars ("M0 0 L0 " or similar prefix)
     let path_data = if d_attr.len() > 9 { &d_attr[9..] } else { d_attr };
 
-    // Parse path data into segments
     let frame_data: Vec<Vec<i32>> = path_data
         .split('C')
         .map(|segment| {
@@ -238,11 +305,9 @@ fn animate_frame(frame: &[i32], t: f64) -> String {
     let matrix = rotation_to_matrix(rotation[0]);
 
     let mut hex_parts = Vec::new();
-    // Color values (first 3, skip alpha)
     for &v in &color[..3] {
         hex_parts.push(format!("{:x}", v.round() as i64));
     }
-    // Matrix values
     for &v in &matrix {
         hex_parts.push(float_to_hex(v.abs().round_to(2)));
     }

@@ -10,7 +10,7 @@ use api::client::TwitterClient;
 use auth::storage::load_credentials;
 
 #[derive(Parser)]
-#[command(name = "twitter-cli", about = "Twitter/X CLI tool", version)]
+#[command(name = "x", about = "X (Twitter) CLI tool", version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -31,8 +31,8 @@ enum Commands {
 
     /// Get user tweets
     Tweets {
-        /// User ID
-        user_id: String,
+        /// Screen name or user ID
+        user: String,
 
         /// Number of tweets to fetch
         #[arg(long, default_value = "20")]
@@ -41,8 +41,8 @@ enum Commands {
 
     /// Get user replies
     Replies {
-        /// User ID
-        user_id: String,
+        /// Screen name or user ID
+        user: String,
 
         /// Number of replies to fetch
         #[arg(long, default_value = "20")]
@@ -51,8 +51,8 @@ enum Commands {
 
     /// Get user's following list
     Following {
-        /// User ID
-        user_id: String,
+        /// Screen name or user ID
+        user: String,
 
         /// Number of results
         #[arg(long, default_value = "20")]
@@ -61,8 +61,8 @@ enum Commands {
 
     /// Get user's followers list
     Followers {
-        /// User ID
-        user_id: String,
+        /// Screen name or user ID
+        user: String,
 
         /// Number of results
         #[arg(long, default_value = "20")]
@@ -180,17 +180,21 @@ async fn main() -> Result<()> {
             let client = TwitterClient::new(creds).await?;
 
             match cmd {
-                Commands::Tweets { user_id, limit } => {
-                    commands::tweets::get_tweets(&client, &user_id, limit).await?;
+                Commands::Tweets { user, limit } => {
+                    let uid = client.resolve_user_id(&user).await?;
+                    commands::tweets::get_tweets(&client, &uid, limit).await?;
                 }
-                Commands::Replies { user_id, limit } => {
-                    commands::tweets::get_replies(&client, &user_id, limit).await?;
+                Commands::Replies { user, limit } => {
+                    let uid = client.resolve_user_id(&user).await?;
+                    commands::tweets::get_replies(&client, &uid, limit).await?;
                 }
-                Commands::Following { user_id, limit } => {
-                    commands::users::get_following(&client, &user_id, limit).await?;
+                Commands::Following { user, limit } => {
+                    let uid = client.resolve_user_id(&user).await?;
+                    commands::users::get_following(&client, &uid, limit).await?;
                 }
-                Commands::Followers { user_id, limit } => {
-                    commands::users::get_followers(&client, &user_id, limit).await?;
+                Commands::Followers { user, limit } => {
+                    let uid = client.resolve_user_id(&user).await?;
+                    commands::users::get_followers(&client, &uid, limit).await?;
                 }
                 Commands::Search { query, limit } => {
                     commands::search::search(&client, &query, limit).await?;

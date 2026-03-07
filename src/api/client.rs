@@ -1,27 +1,34 @@
 use anyhow::{Context, Result};
-use rquest::Client;
+use rquest::Client as RquestClient;
 use rquest_util::Emulation;
 use serde_json::{json, Value};
 
 use super::endpoints;
 use super::features;
-use super::headers::{build_cookie_header, build_headers};
+use super::headers::{build_cookie_header, build_headers, BEARER_TOKEN, USER_AGENT};
 use super::transaction::ClientTransaction;
 use super::types::Credentials;
 
 pub struct TwitterClient {
-    http: Client,
+    http: RquestClient,
+    http_plain: reqwest::Client,
     creds: Credentials,
     transaction: Option<ClientTransaction>,
 }
 
 impl TwitterClient {
     pub async fn new(creds: Credentials) -> Result<Self> {
-        let http = Client::builder()
-            .emulation(Emulation::Chrome133)
+        let http = RquestClient::builder()
+            .emulation(Emulation::Chrome136)
             .cookie_store(false)
             .build()
             .context("Failed to build HTTP client")?;
+
+        let http_plain = reqwest::Client::builder()
+            .user_agent(USER_AGENT)
+            .danger_accept_invalid_certs(true)
+            .build()
+            .context("Failed to build plain HTTP client")?;
 
         let transaction = match ClientTransaction::new().await {
             Ok(ct) => Some(ct),
@@ -33,37 +40,54 @@ impl TwitterClient {
 
         Ok(Self {
             http,
+            http_plain,
             creds,
             transaction,
         })
     }
 
     fn get_transaction_id(&self, method: &str, url: &str) -> Option<String> {
-        let path = url.strip_prefix("https://x.com").unwrap_or(url);
+        // For api.x.com URLs, the transaction ID path must use /i/api prefix
+        // (browser-style path that Twitter validates server-side)
+        let path = if let Some(p) = url.strip_prefix("https://api.x.com") {
+            format!("/i/api{p}")
+        } else {
+            url.strip_prefix("https://x.com")
+                .or_else(|| url.strip_prefix("https://twitter.com"))
+                .unwrap_or(url)
+                .to_string()
+        };
         self.transaction
             .as_ref()
-            .map(|ct| ct.generate(method, path))
+            .map(|ct| ct.generate(method, &path))
     }
 
-    // ---- GraphQL GET helper ----
+    fn build_common_headers(&self) -> Vec<(&str, String)> {
+        let mut h = vec![
+            ("authority", "twitter.com".to_string()),
+            ("accept", "*/*".to_string()),
+            ("accept-language", "zh-CN,zh;q=0.9,zh-TW;q=0.8".to_string()),
+            ("authorization", BEARER_TOKEN.to_string()),
+            ("content-type", "application/json".to_string()),
+            ("x-twitter-active-user", "yes".to_string()),
+            ("x-twitter-auth-type", "OAuth2Session".to_string()),
+            ("x-twitter-client-language", "en".to_string()),
+            ("x-csrf-token", self.creds.ct0.clone()),
+        ];
+        if let Some(tid) = self.get_transaction_id("GET", "") {
+            h.push(("x-client-transaction-id", tid));
+        }
+        h
+    }
 
-    async fn graphql_get(
+    // ---- GraphQL GET with rquest (TLS fingerprint) ----
+
+    async fn graphql_get_rquest(
         &self,
         url: &str,
-        variables: Value,
-        features: Value,
-        field_toggles: Option<Value>,
-    ) -> Result<Value> {
-        let params_variables = serde_json::to_string(&variables)?;
-        let params_features = serde_json::to_string(&features)?;
-        let params_field_toggles = field_toggles
-            .as_ref()
-            .map(|ft| serde_json::to_string(ft))
-            .transpose()?;
-
+        params: &[(&str, String)],
+    ) -> Result<Option<String>> {
         let max_retries = 5;
-        let mut last_status = rquest::StatusCode::default();
-
         for attempt in 0..max_retries {
             let mut headers = build_headers(&self.creds.ct0);
             let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0);
@@ -75,58 +99,140 @@ impl TwitterClient {
                 );
             }
 
-            let mut params = vec![
-                ("variables", params_variables.clone()),
-                ("features", params_features.clone()),
-            ];
-            if let Some(ref ft) = params_field_toggles {
-                params.push(("fieldToggles", ft.clone()));
-            }
-
             let resp = self
                 .http
                 .get(url)
                 .headers(headers)
                 .header("cookie", &cookie)
-                .query(&params)
+                .query(params)
                 .send()
                 .await
                 .context("HTTP GET failed")?;
 
-            last_status = resp.status();
+            let status = resp.status();
             let text = resp.text().await.context("Failed to read response body")?;
 
-            if last_status == 404 && attempt < max_retries - 1 {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            if status == 404 && attempt < max_retries - 1 {
                 continue;
             }
 
-            if !last_status.is_success() {
+            if status == 404 {
+                return Ok(None); // Signal to try fallback
+            }
+
+            if !status.is_success() {
                 let preview = if text.is_empty() {
                     "(empty body)"
                 } else {
                     &text[..text.len().min(500)]
                 };
-                anyhow::bail!("HTTP {last_status} from {url}\nBody: {preview}");
+                anyhow::bail!("HTTP {status} from {url}\nBody: {preview}");
             }
 
-            return self.parse_graphql_response(url, last_status, &text);
+            return Ok(Some(text));
         }
-
-        anyhow::bail!("HTTP {last_status} from {url} after {max_retries} retries");
-
-        unreachable!()
+        Ok(None)
     }
 
-    fn parse_graphql_response(
+    // ---- GraphQL GET with reqwest (plain TLS, fallback) ----
+
+    async fn graphql_get_plain(
         &self,
         url: &str,
-        status: rquest::StatusCode,
-        text: &str,
+        params: &[(&str, String)],
+    ) -> Result<Option<String>> {
+        let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0);
+
+        let mut req = self
+            .http_plain
+            .get(url)
+            .header("authority", "twitter.com")
+            .header("accept", "*/*")
+            .header("accept-language", "zh-CN,zh;q=0.9,zh-TW;q=0.8")
+            .header("authorization", BEARER_TOKEN)
+            .header("content-type", "application/json")
+            .header("x-twitter-active-user", "yes")
+            .header("x-twitter-auth-type", "OAuth2Session")
+            .header("x-twitter-client-language", "en")
+            .header("x-csrf-token", &self.creds.ct0)
+            .header("cookie", &cookie);
+
+        if let Some(tid) = self.get_transaction_id("GET", url) {
+            req = req.header("x-client-transaction-id", tid);
+        }
+
+        let max_retries = 3;
+        for attempt in 0..max_retries {
+            let resp = req
+                .try_clone()
+                .context("Failed to clone request")?
+                .query(params)
+                .send()
+                .await
+                .context("HTTP GET (plain) failed")?;
+
+            let status = resp.status();
+            let text = resp.text().await.context("Failed to read response body")?;
+
+            if status == reqwest::StatusCode::NOT_FOUND && attempt < max_retries - 1 {
+                continue;
+            }
+
+            if status == reqwest::StatusCode::NOT_FOUND {
+                return Ok(None);
+            }
+
+            if !status.is_success() {
+                let preview = if text.is_empty() {
+                    "(empty body)"
+                } else {
+                    &text[..text.len().min(500)]
+                };
+                anyhow::bail!("HTTP {status} from {url}\nBody: {preview}");
+            }
+
+            return Ok(Some(text));
+        }
+        Ok(None)
+    }
+
+    // ---- Unified GraphQL GET: try rquest first, fallback to reqwest ----
+
+    async fn graphql_get(
+        &self,
+        url: &str,
+        variables: Value,
+        features: Value,
+        field_toggles: Option<Value>,
     ) -> Result<Value> {
+        let params_variables = serde_json::to_string(&variables)?;
+        let params_features = serde_json::to_string(&features)?;
+
+        let mut params: Vec<(&str, String)> = vec![
+            ("variables", params_variables),
+            ("features", params_features),
+        ];
+        if let Some(ref ft) = field_toggles {
+            params.push(("fieldToggles", serde_json::to_string(ft)?));
+        }
+
+        // Try rquest (with TLS fingerprint) first
+        if let Some(text) = self.graphql_get_rquest(url, &params).await? {
+            return self.parse_graphql_response(url, &text);
+        }
+
+        // Fallback to plain reqwest (no TLS fingerprint)
+        if let Some(text) = self.graphql_get_plain(url, &params).await? {
+            return self.parse_graphql_response(url, &text);
+        }
+
+        anyhow::bail!("HTTP 404 from {url} after retries with both clients");
+    }
+
+    fn parse_graphql_response(&self, url: &str, text: &str) -> Result<Value> {
         let json: Value = serde_json::from_str(text).with_context(|| {
             format!(
-                "Failed to parse JSON (status {status}): {}",
+                "Failed to parse JSON: {}",
                 &text[..text.len().min(200)]
             )
         })?;
@@ -159,9 +265,25 @@ impl TwitterClient {
     // ---- GraphQL POST helper ----
 
     async fn graphql_post(&self, url: &str, body: Value) -> Result<Value> {
-        let max_retries = 5;
-        let mut last_status = rquest::StatusCode::default();
+        // Try rquest first
+        if let Some(text) = self.graphql_post_rquest(url, &body).await? {
+            let json: Value = serde_json::from_str(&text)
+                .context("Failed to parse JSON")?;
+            return Ok(json);
+        }
 
+        // Fallback to plain reqwest
+        if let Some(text) = self.graphql_post_plain(url, &body).await? {
+            let json: Value = serde_json::from_str(&text)
+                .context("Failed to parse JSON")?;
+            return Ok(json);
+        }
+
+        anyhow::bail!("HTTP 404 from {url} after retries with both clients");
+    }
+
+    async fn graphql_post_rquest(&self, url: &str, body: &Value) -> Result<Option<String>> {
+        let max_retries = 3;
         for attempt in 0..max_retries {
             let mut headers = build_headers(&self.creds.ct0);
             let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0);
@@ -178,30 +300,69 @@ impl TwitterClient {
                 .post(url)
                 .headers(headers)
                 .header("cookie", &cookie)
-                .json(&body)
+                .json(body)
                 .send()
                 .await
                 .context("HTTP POST failed")?;
 
-            last_status = resp.status();
+            let status = resp.status();
             let text = resp.text().await?;
 
-            if last_status == 404 && attempt < max_retries - 1 {
+            if status == 404 && attempt < max_retries - 1 {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 continue;
             }
-
-            if last_status == 429 {
+            if status == 404 {
+                return Ok(None);
+            }
+            if status == 429 {
                 anyhow::bail!("Rate limited (429)");
             }
-
-            let json: Value = serde_json::from_str(&text)
-                .with_context(|| format!("Failed to parse JSON (status {last_status})"))?;
-
-            return Ok(json);
+            return Ok(Some(text));
         }
+        Ok(None)
+    }
 
-        anyhow::bail!("HTTP {last_status} from {url} after {max_retries} retries");
+    async fn graphql_post_plain(&self, url: &str, body: &Value) -> Result<Option<String>> {
+        let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0);
+        let max_retries = 3;
+
+        for attempt in 0..max_retries {
+            let mut req = self
+                .http_plain
+                .post(url)
+                .header("authority", "twitter.com")
+                .header("accept", "*/*")
+                .header("authorization", BEARER_TOKEN)
+                .header("x-twitter-active-user", "yes")
+                .header("x-twitter-auth-type", "OAuth2Session")
+                .header("x-twitter-client-language", "en")
+                .header("x-csrf-token", &self.creds.ct0)
+                .header("cookie", &cookie)
+                .json(body);
+
+            if let Some(tid) = self.get_transaction_id("POST", url) {
+                req = req.header("x-client-transaction-id", tid);
+            }
+
+            let resp = req.send().await.context("HTTP POST (plain) failed")?;
+
+            let status = resp.status();
+            let text = resp.text().await?;
+
+            if status == reqwest::StatusCode::NOT_FOUND && attempt < max_retries - 1 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
+            if status == reqwest::StatusCode::NOT_FOUND {
+                return Ok(None);
+            }
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                anyhow::bail!("Rate limited (429)");
+            }
+            return Ok(Some(text));
+        }
+        Ok(None)
     }
 
     // ---- REST POST helper (for v1.1 endpoints) ----
@@ -390,6 +551,21 @@ impl TwitterClient {
             Some(features::field_toggles()),
         )
         .await
+    }
+
+    /// Resolve a user identifier (screen_name or numeric user_id) to a numeric user_id.
+    pub async fn resolve_user_id(&self, identifier: &str) -> Result<String> {
+        if identifier.chars().all(|c| c.is_ascii_digit()) {
+            return Ok(identifier.to_string());
+        }
+        let resp = self.get_user_by_screen_name(identifier).await?;
+        resp.get("data")
+            .and_then(|d| d.get("user"))
+            .and_then(|u| u.get("result"))
+            .and_then(|r| r.get("rest_id"))
+            .and_then(|id| id.as_str())
+            .map(|s| s.to_string())
+            .context(format!("Could not resolve user_id for @{identifier}"))
     }
 
     pub async fn get_user_by_screen_name(&self, screen_name: &str) -> Result<Value> {
