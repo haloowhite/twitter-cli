@@ -12,32 +12,100 @@ description: Use x-cli for ALL Twitter/X operations — reading tweets, posting,
 ## Setup
 
 ```bash
-# Install pre-built binary (macOS ARM64)
-curl -L https://github.com/haloowhite/twitter-cli/releases/latest/download/x-macos-arm64 -o /usr/local/bin/x && chmod +x /usr/local/bin/x
+# One-line install (auto-detects OS/arch)
+curl -fsSL https://raw.githubusercontent.com/haloowhite/twitter-cli/main/install.sh | bash
 
 # Or build from source
-cd /Users/white/PycharmProjects/twitter-cli && source ~/.cargo/env && cargo build --release
-# Binary at: target/release/x
+git clone https://github.com/haloowhite/twitter-cli.git && cd twitter-cli
+cargo build --release  # binary at target/release/x
 ```
 
 ## Authentication
 
-```bash
-# From browser cookies (recommended)
-x auth --browser chrome    # also: firefox, edge, safari
+Credentials file: `~/.x-cli/credentials.json`
 
-# Or provide auth_token directly
-x auth --token "your_auth_token"
+```json
+{
+  "auth_token": "40-char hex string",
+  "ct0": "csrf token (auto-generated if omitted)",
+  "extra_cookies": "optional, full cookie string for write ops"
+}
 ```
 
-If write operations fail with error 226, edit `~/.x-cli/credentials.json` and add `extra_cookies`:
+### If agent has access to local browser
+
+```bash
+x auth --browser chrome    # also: firefox, edge, safari
+```
+
+### If agent is on cloud, user's Twitter login is on local PC
+
+Guide the user to:
+1. Open x.com in Chrome/Edge/Firefox (must be logged in)
+2. Press `F12` → **Application** tab → **Cookies** → `https://x.com`
+3. Copy the `auth_token` value (40-char hex)
+4. (Optional) Copy `ct0` value
+
+Then on the cloud server:
+```bash
+x auth --token "the_auth_token_value"
+```
+
+Or write the file directly:
+```bash
+mkdir -p ~/.x-cli && cat > ~/.x-cli/credentials.json << 'CREDENTIALS'
+{"auth_token":"PASTE_HERE","ct0":"PASTE_HERE_OR_OMIT"}
+CREDENTIALS
+chmod 600 ~/.x-cli/credentials.json
+```
+
+### If user only has a mobile phone (Twitter on mobile, agent on cloud)
+
+**Method A: Mobile browser JavaScript (easiest)**
+1. Open https://x.com in mobile Chrome/Safari, log in
+2. Type in address bar (must manually type `javascript:` prefix, cannot paste):
+   `javascript:void(document.title=document.cookie)`
+3. Page title becomes the cookie string — find `auth_token=xxx` value
+4. Send the value to the cloud agent
+
+**Method B: Android Chrome remote debug**
+1. Open x.com in phone Chrome
+2. On desktop Chrome, open `chrome://inspect/#devices`
+3. In Console run: `document.cookie.split(';').find(c=>c.trim().startsWith('auth_token=')).trim()`
+4. Copy the output value
+
+**Method C: Network capture (iOS/Android)**
+1. Install a packet capture app (Stream, HTTP Catcher, Charles)
+2. Open X/Twitter app, browse anything
+3. Find requests to `api.x.com` or `x.com`
+4. Extract `auth_token` and `ct0` from the `Cookie` request header
+
+### After obtaining auth_token
+
+On the cloud server, run:
+```bash
+x auth --token "the_auth_token"
+x me  # verify authentication works
+```
+
+### Write operations returning error 226
+
+Add full cookies to `~/.x-cli/credentials.json`:
 ```json
 {
   "auth_token": "xxx",
   "ct0": "xxx",
-  "extra_cookies": "guest_id=xxx; kdt=xxx; twid=xxx"
+  "extra_cookies": "guest_id=xxx; kdt=xxx; twid=xxx; __cf_bm=xxx"
 }
 ```
+Get the full cookie string from browser DevTools: **Network** tab → any request to x.com → copy `Cookie` header value.
+
+### Security notes
+
+- `auth_token` is a login credential — **never share publicly**
+- Valid for months; expires when password is changed
+- `ct0` is auto-generated if not provided
+- Set `chmod 600` on credentials.json
 
 ---
 

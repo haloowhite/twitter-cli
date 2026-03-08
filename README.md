@@ -50,15 +50,110 @@ sudo cp target/release/x /usr/local/bin/
 
 ## 认证
 
-```bash
-# 从浏览器提取 Cookie（推荐）
-x auth --browser chrome   # 支持: chrome, firefox, edge, safari
+凭证保存在 `~/.x-cli/credentials.json`，格式：
 
-# 或手动提供 auth_token
-x auth --token "你的auth_token"
+```json
+{
+  "auth_token": "你的auth_token",
+  "ct0": "自动生成的csrf_token",
+  "extra_cookies": "可选，完整cookie字符串"
+}
 ```
 
-凭证保存在 `~/.x-cli/credentials.json`。
+### 场景一：本地电脑有浏览器登录（最简单）
+
+```bash
+x auth --browser chrome   # 支持: chrome, firefox, edge, safari
+```
+
+### 场景二：Agent 在云端，推特登录在本地电脑
+
+**步骤 1：在本地电脑获取 auth_token**
+
+打开 Chrome/Edge/Firefox，登录 x.com，然后：
+
+1. 按 `F12` 打开 DevTools
+2. 切换到 **Application**（应用程序）标签
+3. 左侧展开 **Cookies** → 点击 `https://x.com`
+4. 找到 `auth_token`，复制其 **Value**（一串40位十六进制字符）
+5.（可选）同时复制 `ct0` 的值
+
+**步骤 2：在云端服务器配置**
+
+```bash
+# 方式 A：直接用命令
+x auth --token "你复制的auth_token"
+
+# 方式 B：直接写配置文件
+mkdir -p ~/.x-cli
+cat > ~/.x-cli/credentials.json << 'EOF'
+{
+  "auth_token": "你复制的auth_token",
+  "ct0": "你复制的ct0"
+}
+EOF
+chmod 600 ~/.x-cli/credentials.json
+```
+
+> **提示**：如果写操作（发推、点赞等）返回 226 错误，需要提供完整 cookie。在 DevTools 的 Network 标签中随便找一个请求，复制请求头中的完整 `Cookie` 值，填入 `extra_cookies` 字段。
+
+### 场景三：只有手机，推特登录在移动端，Agent 在云端
+
+**方法 A：手机浏览器 + JavaScript（推荐）**
+
+1. 用手机浏览器（Chrome/Safari）打开 https://x.com 并登录
+2. 在地址栏输入以下内容并访问（需要手动输入 `javascript:` 前缀，不能粘贴）：
+
+```
+javascript:void(document.title=document.cookie)
+```
+
+3. 页面标题会变成 cookie 字符串，从中找到 `auth_token=xxx` 的值
+4. 复制这个值，到云端服务器执行 `x auth --token "xxx"`
+
+**方法 B：手机浏览器 DevTools（Android Chrome）**
+
+1. 手机 Chrome 打开 x.com 并登录
+2. 电脑 Chrome 打开 `chrome://inspect/#devices`，连接手机
+3. 在远程调试界面的 Console 中执行：
+
+```javascript
+document.cookie.split(';').find(c => c.trim().startsWith('auth_token=')).trim()
+```
+
+4. 复制输出的 `auth_token=xxx` 值
+
+**方法 C：通过请求抓包（iOS/Android 通用）**
+
+1. 安装抓包工具（如 Stream/HTTP Catcher/Charles）
+2. 打开 X/Twitter App，随意浏览
+3. 在抓包记录中找到发往 `api.x.com` 或 `x.com` 的请求
+4. 查看请求头中的 `Cookie`，提取 `auth_token` 和 `ct0` 的值
+
+**方法 D：直接传配置文件**
+
+在任意一台已认证的设备上导出配置，传到云端：
+
+```bash
+# 已认证设备上
+cat ~/.x-cli/credentials.json
+# 复制输出内容
+
+# 云端服务器上
+mkdir -p ~/.x-cli
+cat > ~/.x-cli/credentials.json << 'EOF'
+（粘贴刚才复制的 JSON 内容）
+EOF
+chmod 600 ~/.x-cli/credentials.json
+```
+
+### 注意事项
+
+- `auth_token` 是你的登录凭证，**请勿泄露给他人**
+- `auth_token` 有效期较长（通常数月），过期后需重新获取
+- 修改密码会使所有 `auth_token` 失效
+- `ct0` 可以不提供，工具会自动生成随机值
+- 建议对 `credentials.json` 设置 `chmod 600` 权限
 
 ## 输出格式
 
