@@ -15,6 +15,9 @@ pub const TWEET_DETAIL: &str =
 pub const USER_BY_SCREEN_NAME: &str =
     "https://x.com/i/api/graphql/pLsOiyHJ1eFwPJlNmLp4Bg/UserByScreenName";
 
+pub const HOME_TIMELINE: &str =
+    "https://x.com/i/api/graphql/snvCaalBp51MiDb3-nGblg/HomeTimeline";
+
 // Write endpoints (POST)
 pub const CREATE_TWEET: &str =
     "https://x.com/i/api/graphql/uY34Pldm6W89yqswRmPMSQ/CreateTweet";

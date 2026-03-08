@@ -13,6 +13,10 @@ use auth::storage::load_credentials;
 #[derive(Parser)]
 #[command(name = "x", about = "X (Twitter) CLI tool", version)]
 struct Cli {
+    /// Compact output: one line per tweet, minimal tokens
+    #[arg(short, long, global = true)]
+    compact: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -28,6 +32,13 @@ enum Commands {
         /// Provide auth_token directly
         #[arg(long)]
         token: Option<String>,
+    },
+
+    /// Get home timeline (For You / Following)
+    Timeline {
+        /// Number of tweets to fetch
+        #[arg(long, default_value = "20")]
+        limit: u32,
     },
 
     /// Get user tweets
@@ -180,14 +191,18 @@ async fn main() -> Result<()> {
             let creds = load_credentials()?;
             let client = TwitterClient::new(creds).await?;
 
+            let compact = cli.compact;
             match cmd {
+                Commands::Timeline { limit } => {
+                    commands::tweets::get_timeline(&client, limit, compact).await?;
+                }
                 Commands::Tweets { user, limit } => {
                     let uid = client.resolve_user_id(&user).await?;
-                    commands::tweets::get_tweets(&client, &uid, limit).await?;
+                    commands::tweets::get_tweets(&client, &uid, limit, compact).await?;
                 }
                 Commands::Replies { user, limit } => {
                     let uid = client.resolve_user_id(&user).await?;
-                    commands::tweets::get_replies(&client, &uid, limit).await?;
+                    commands::tweets::get_replies(&client, &uid, limit, compact).await?;
                 }
                 Commands::Following { user, limit } => {
                     let uid = client.resolve_user_id(&user).await?;
@@ -198,7 +213,7 @@ async fn main() -> Result<()> {
                     commands::users::get_followers(&client, &uid, limit).await?;
                 }
                 Commands::Search { query, limit } => {
-                    commands::search::search(&client, &query, limit).await?;
+                    commands::search::search(&client, &query, limit, compact).await?;
                 }
                 Commands::Detail { tweet_id, context } => {
                     let resp = if context {
@@ -208,7 +223,12 @@ async fn main() -> Result<()> {
                     };
                     if context {
                         let tweets = output::extract_tweets(&resp);
-                        println!("{}", serde_json::to_string_pretty(&tweets)?);
+                        if compact {
+                            let c: Vec<output::CompactTweet> = tweets.iter().map(output::CompactTweet::from_tweet).collect();
+                            println!("{}", serde_json::to_string_pretty(&c)?);
+                        } else {
+                            println!("{}", serde_json::to_string_pretty(&tweets)?);
+                        }
                     } else {
                         match output::extract_single_tweet(&resp) {
                             Some(t) => println!("{}", serde_json::to_string_pretty(&t)?),

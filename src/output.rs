@@ -64,6 +64,46 @@ pub struct ActionResult {
     pub id: Option<String>,
 }
 
+/// Compact tweet: one-liner per tweet, minimal tokens for LLM consumption.
+#[derive(Debug, Serialize)]
+pub struct CompactTweet {
+    pub id: String,
+    pub author: String,   // @handle
+    pub text: String,     // truncated, single line
+    pub likes: u64,
+    pub rts: u64,
+    pub time: String,     // short time
+}
+
+impl CompactTweet {
+    pub fn from_tweet(t: &TweetOutput) -> Self {
+        // Collapse newlines, truncate to 140 chars
+        let text = t.text.replace('\n', " ");
+        let text = if text.len() > 140 { format!("{}...", &text[..text.char_indices().take_while(|(i, _)| *i < 140).last().map(|(i, c)| i + c.len_utf8()).unwrap_or(140)]) } else { text };
+        // Short time: "Mar 07 05:51"
+        let time = parse_short_time(&t.created_at);
+        CompactTweet {
+            id: t.id.clone(),
+            author: format!("@{}", t.author.handle),
+            text,
+            likes: t.stats.likes,
+            rts: t.stats.retweets,
+            time,
+        }
+    }
+}
+
+fn parse_short_time(created_at: &str) -> String {
+    // Input: "Sat Mar 07 05:51:02 +0000 2026"
+    // Output: "Mar 07 05:51"
+    let parts: Vec<&str> = created_at.split_whitespace().collect();
+    if parts.len() >= 4 {
+        format!("{} {} {}", parts[1], parts[2], &parts[3][..5])
+    } else {
+        created_at.to_string()
+    }
+}
+
 // ── Recursive JSON search (ported from heimdall json_praser.py) ─────
 
 fn find_all_by_field(data: &Value, key: &str, target: &str) -> Vec<Value> {

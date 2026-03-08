@@ -405,6 +405,30 @@ impl TwitterClient {
 
     // ===== Read APIs =====
 
+    pub async fn get_home_timeline(
+        &self,
+        count: u32,
+        cursor: Option<&str>,
+    ) -> Result<Value> {
+        let mut variables = json!({
+            "count": count,
+            "includePromotedContent": true,
+            "latestControlAvailable": true,
+            "requestContext": "launch",
+            "withCommunity": true,
+        });
+        if let Some(c) = cursor {
+            variables["cursor"] = json!(c);
+        }
+        self.graphql_get(
+            endpoints::HOME_TIMELINE,
+            variables,
+            features::features(),
+            Some(features::field_toggles()),
+        )
+        .await
+    }
+
     pub async fn get_user_tweets(
         &self,
         user_id: &str,
