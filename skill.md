@@ -22,90 +22,130 @@ cargo build --release  # binary at target/release/x
 
 ## Authentication
 
-Credentials file: `~/.x-cli/credentials.json`
+**IMPORTANT FOR AGENTS**: Before executing ANY x-cli command, you MUST first check if credentials exist. If not, you MUST proactively guide the user through the authentication process step by step. Do NOT assume credentials are configured. Do NOT skip this step.
 
-```json
+### Step 0: Check if already authenticated
+
+```bash
+x me 2>/dev/null && echo "AUTH_OK" || echo "AUTH_NEEDED"
+```
+
+If `AUTH_OK`, skip to [Command Reference](#command-reference).
+If `AUTH_NEEDED`, proceed to guide the user:
+
+### Step 1: Agent guides user to obtain cookies
+
+**You (the agent) MUST send the following message to the user, choosing the appropriate version based on their device:**
+
+---
+
+**If user has a desktop/laptop computer:**
+
+> 我需要你的 Twitter 登录凭证来帮你操作。请按以下步骤获取：
+>
+> 1. 用 Chrome/Edge/Firefox 打开 https://x.com（确保已登录）
+> 2. 按 `F12` 打开开发者工具
+> 3. 点击顶部的 **Network**（网络）标签
+> 4. 在页面上随意点击刷新或浏览，让网络请求出现
+> 5. 在请求列表中，点击任意一个发往 `x.com` 的请求
+> 6. 在右侧找到 **Request Headers**（请求头）
+> 7. 找到 `Cookie:` 这一行，**右键 → 复制值**
+> 8. 把复制的完整 Cookie 字符串发给我
+>
+> ⚠️ 这个 Cookie 包含你的登录信息，请不要分享给其他人。我只会在本机使用它来配置 x-cli。
+
+---
+
+**If user only has a mobile phone:**
+
+> 我需要你的 Twitter 登录凭证来帮你操作。请按以下步骤获取：
+>
+> **安卓手机：**
+> 1. 用 Chrome 打开 https://x.com（确保已登录）
+> 2. 在地址栏中手动输入（注意：必须手打，不能粘贴 `javascript:` 前缀）：
+>    `javascript:void(prompt('Cookie',document.cookie))`
+> 3. 会弹出一个对话框，里面是你的 Cookie 字符串
+> 4. 长按全选 → 复制 → 发给我
+>
+> **iPhone：**
+> 1. 用 Safari 打开 https://x.com（确保已登录）
+> 2. 如果你有"快捷指令"App，可以创建一个快捷指令：
+>    - 动作：在 Safari 中运行 JavaScript
+>    - 代码：`completion(document.cookie)`
+>    - 运行后复制输出发给我
+> 3. 或者：安装一个抓包工具（如 Stream、HTTP Catcher），打开 Twitter App 浏览一下，找到请求头中的 Cookie 值发给我
+>
+> ⚠️ 这个 Cookie 包含你的登录信息，请不要分享给其他人。
+
+---
+
+### Step 2: Agent parses cookie string and configures x-cli
+
+When the user provides the cookie string, the agent MUST:
+
+1. **Extract `auth_token` and `ct0`** from the cookie string:
+
+```bash
+# Example cookie string from user:
+# "guest_id=v1%3A...; ct0=abc123def456...; auth_token=a1b2c3d4e5f6...; twid=u%3D123..."
+
+# Parse with shell:
+FULL_COOKIE="<paste user's cookie string here>"
+AUTH_TOKEN=$(echo "$FULL_COOKIE" | grep -oE 'auth_token=[a-f0-9]+' | cut -d= -f2)
+CT0=$(echo "$FULL_COOKIE" | grep -oE 'ct0=[a-f0-9]+' | cut -d= -f2)
+echo "auth_token: $AUTH_TOKEN"
+echo "ct0: $CT0"
+```
+
+2. **Write credentials file with full cookies** (for maximum compatibility):
+
+```bash
+mkdir -p ~/.x-cli
+cat > ~/.x-cli/credentials.json << CREDENTIALS
 {
-  "auth_token": "40-char hex string",
-  "ct0": "csrf token (auto-generated if omitted)",
-  "extra_cookies": "optional, full cookie string for write ops"
+  "auth_token": "$AUTH_TOKEN",
+  "ct0": "$CT0",
+  "extra_cookies": "$FULL_COOKIE"
 }
-```
-
-### If agent has access to local browser
-
-```bash
-x auth --browser chrome    # also: firefox, edge, safari
-```
-
-### If agent is on cloud, user's Twitter login is on local PC
-
-Guide the user to:
-1. Open x.com in Chrome/Edge/Firefox (must be logged in)
-2. Press `F12` → **Application** tab → **Cookies** → `https://x.com`
-3. Copy the `auth_token` value (40-char hex)
-4. (Optional) Copy `ct0` value
-
-Then on the cloud server:
-```bash
-x auth --token "the_auth_token_value"
-```
-
-Or write the file directly:
-```bash
-mkdir -p ~/.x-cli && cat > ~/.x-cli/credentials.json << 'CREDENTIALS'
-{"auth_token":"PASTE_HERE","ct0":"PASTE_HERE_OR_OMIT"}
 CREDENTIALS
 chmod 600 ~/.x-cli/credentials.json
 ```
 
-### If user only has a mobile phone (Twitter on mobile, agent on cloud)
+3. **Verify authentication**:
 
-**Method A: Mobile browser JavaScript (easiest)**
-1. Open https://x.com in mobile Chrome/Safari, log in
-2. Type in address bar (must manually type `javascript:` prefix, cannot paste):
-   `javascript:void(document.title=document.cookie)`
-3. Page title becomes the cookie string — find `auth_token=xxx` value
-4. Send the value to the cloud agent
-
-**Method B: Android Chrome remote debug**
-1. Open x.com in phone Chrome
-2. On desktop Chrome, open `chrome://inspect/#devices`
-3. In Console run: `document.cookie.split(';').find(c=>c.trim().startsWith('auth_token=')).trim()`
-4. Copy the output value
-
-**Method C: Network capture (iOS/Android)**
-1. Install a packet capture app (Stream, HTTP Catcher, Charles)
-2. Open X/Twitter app, browse anything
-3. Find requests to `api.x.com` or `x.com`
-4. Extract `auth_token` and `ct0` from the `Cookie` request header
-
-### After obtaining auth_token
-
-On the cloud server, run:
 ```bash
-x auth --token "the_auth_token"
-x me  # verify authentication works
+x me
 ```
 
-### Write operations returning error 226
+If successful, tell the user their account is connected and show their handle.
+If failed, ask the user to re-check their cookie (may have expired or been copied incorrectly).
 
-Add full cookies to `~/.x-cli/credentials.json`:
+### Step 3: Handle common auth issues
+
+| Symptom | Agent action |
+|---------|-------------|
+| `x me` returns error | Cookie expired — guide user to re-extract |
+| Read works, write returns 226 | Need full cookies — ask user for complete Cookie header from Network tab |
+| `ct0` not found in cookie | OK — tool auto-generates one |
+| User says "I changed my password" | All old cookies invalidated — guide re-extraction |
+
+### Credentials file format
+
 ```json
 {
-  "auth_token": "xxx",
-  "ct0": "xxx",
-  "extra_cookies": "guest_id=xxx; kdt=xxx; twid=xxx; __cf_bm=xxx"
+  "auth_token": "40-char hex (REQUIRED)",
+  "ct0": "csrf token (auto-generated if empty)",
+  "extra_cookies": "full cookie string (recommended for write ops)"
 }
 ```
-Get the full cookie string from browser DevTools: **Network** tab → any request to x.com → copy `Cookie` header value.
 
-### Security notes
+Location: `~/.x-cli/credentials.json` (permissions: 600)
 
-- `auth_token` is a login credential — **never share publicly**
-- Valid for months; expires when password is changed
-- `ct0` is auto-generated if not provided
-- Set `chmod 600` on credentials.json
+### Security
+
+- `auth_token` is equivalent to a login session — **never log it, print it, or share it**
+- Valid for months; invalidated by password change
+- Agent should treat cookie values as secrets (do not echo to stdout unnecessarily)
 
 ---
 
