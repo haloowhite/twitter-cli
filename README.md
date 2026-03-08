@@ -56,7 +56,7 @@ sudo cp target/release/x /usr/local/bin/
 {
   "auth_token": "你的auth_token",
   "ct0": "自动生成的csrf_token",
-  "extra_cookies": "可选，完整cookie字符串"
+  "extra_cookies": "完整cookie字符串（写操作必须，否则发推会报226错误）"
 }
 ```
 
@@ -68,38 +68,43 @@ x auth --browser chrome   # 支持: chrome, firefox, edge, safari
 
 ### 场景二：Agent 在云端，推特登录在本地电脑
 
-**步骤 1：在本地电脑获取 auth_token**
+**步骤 1：在本地电脑获取完整 Cookie**
 
 打开 Chrome/Edge/Firefox，登录 x.com，然后：
 
 1. 按 `F12` 打开 DevTools
-2. 切换到 **Application**（应用程序）标签
-3. 左侧展开 **Cookies** → 点击 `https://x.com`
-4. 找到 `auth_token`，复制其 **Value**（一串40位十六进制字符）
-5.（可选）同时复制 `ct0` 的值
+2. 点击 **Network**（网络）标签
+3. 在页面上随意刷新或浏览，让请求出现
+4. 点击任意一个发往 `x.com` 的请求
+5. 在右侧找到 **Request Headers** → **Cookie:** 这一行
+6. **右键 → 复制值**，得到完整的 Cookie 字符串
 
-**步骤 2：在云端服务器配置**
+**步骤 2：从 Cookie 中提取字段并配置**
 
 ```bash
-# 方式 A：直接用命令
-x auth --token "你复制的auth_token"
+# 从完整 Cookie 字符串中提取 auth_token 和 ct0
+FULL_COOKIE="<粘贴完整Cookie字符串>"
+AUTH_TOKEN=$(echo "$FULL_COOKIE" | grep -oE 'auth_token=[a-f0-9]+' | cut -d= -f2)
+CT0=$(echo "$FULL_COOKIE" | grep -oE 'ct0=[a-f0-9]+' | cut -d= -f2)
 
-# 方式 B：直接写配置文件
 mkdir -p ~/.x-cli
-cat > ~/.x-cli/credentials.json << 'EOF'
+cat > ~/.x-cli/credentials.json << CREDENTIALS
 {
-  "auth_token": "你复制的auth_token",
-  "ct0": "你复制的ct0"
+  "auth_token": "$AUTH_TOKEN",
+  "ct0": "$CT0",
+  "extra_cookies": "$FULL_COOKIE"
 }
-EOF
+CREDENTIALS
 chmod 600 ~/.x-cli/credentials.json
 ```
 
-> **提示**：如果写操作（发推、点赞等）返回 226 错误，需要提供完整 cookie。在 DevTools 的 Network 标签中随便找一个请求，复制请求头中的完整 `Cookie` 值，填入 `extra_cookies` 字段。
+> **⚠️ 重要**：写操作（发推、回复、引用转推）**必须**提供完整 cookie（`extra_cookies` 字段）。只提供 `auth_token` + `ct0` 会导致 226 错误（"looks like automated behavior"）。读操作（浏览推文、搜索等）不受影响。
 
 ### 场景三：只有手机，推特登录在移动端，Agent 在云端
 
-**方法 A：手机浏览器 + JavaScript（推荐）**
+> **⚠️ 注意**：以下方法获取的 cookie 可能不完整（手机浏览器限制），可能只能支持读操作。如需发推等写操作，建议用电脑浏览器获取完整 Cookie（场景二）。
+
+**方法 A：手机浏览器 + JavaScript**
 
 1. 用手机浏览器（Chrome/Safari）打开 https://x.com 并登录
 2. 在地址栏输入以下内容并访问（需要手动输入 `javascript:` 前缀，不能粘贴）：
@@ -108,8 +113,8 @@ chmod 600 ~/.x-cli/credentials.json
 javascript:void(document.title=document.cookie)
 ```
 
-3. 页面标题会变成 cookie 字符串，从中找到 `auth_token=xxx` 的值
-4. 复制这个值，到云端服务器执行 `x auth --token "xxx"`
+3. 页面标题会变成 cookie 字符串，**复制完整的 cookie 字符串**
+4. 将完整字符串发给 Agent，Agent 按场景二的步骤 2 配置（包含 `extra_cookies`）
 
 **方法 B：手机浏览器 DevTools（Android Chrome）**
 
@@ -118,17 +123,17 @@ javascript:void(document.title=document.cookie)
 3. 在远程调试界面的 Console 中执行：
 
 ```javascript
-document.cookie.split(';').find(c => c.trim().startsWith('auth_token=')).trim()
+document.cookie
 ```
 
-4. 复制输出的 `auth_token=xxx` 值
+4. 复制输出的**完整 cookie 字符串**
 
 **方法 C：通过请求抓包（iOS/Android 通用）**
 
 1. 安装抓包工具（如 Stream/HTTP Catcher/Charles）
 2. 打开 X/Twitter App，随意浏览
 3. 在抓包记录中找到发往 `api.x.com` 或 `x.com` 的请求
-4. 查看请求头中的 `Cookie`，提取 `auth_token` 和 `ct0` 的值
+4. 复制请求头中的**完整 `Cookie` 值**
 
 **方法 D：直接传配置文件**
 
@@ -149,6 +154,7 @@ chmod 600 ~/.x-cli/credentials.json
 
 ### 注意事项
 
+- **写操作必须提供完整 cookie**（`extra_cookies` 字段），否则会报 226 错误
 - `auth_token` 是你的登录凭证，**请勿泄露给他人**
 - `auth_token` 有效期较长（通常数月），过期后需重新获取
 - 修改密码会使所有 `auth_token` 失效
@@ -246,7 +252,7 @@ x user elonmusk | jq '.followers_count'                         # 粉丝数
 | 问题 | 解决方案 |
 |------|----------|
 | `No credentials found` | 运行 `x auth --browser chrome` |
-| 写操作 226 错误 | 编辑 credentials.json 添加 `extra_cookies` |
+| 写操作 226 错误 | **必须提供完整 cookie**：从浏览器 Network 标签复制完整 Cookie 字符串，填入 credentials.json 的 `extra_cookies` 字段 |
 | 404 错误 | 删除 `~/.x-cli/transaction_cache.json` 重试 |
 
 ## 完整用法

@@ -24,6 +24,8 @@ cargo build --release  # binary at target/release/x
 
 **IMPORTANT FOR AGENTS**: Before executing ANY x-cli command, you MUST first check if credentials exist. If not, you MUST proactively guide the user through the authentication process step by step. Do NOT assume credentials are configured. Do NOT skip this step.
 
+**CRITICAL**: Write operations (posting tweets, replying, quoting) REQUIRE full browser cookies in the `extra_cookies` field. Only providing `auth_token` + `ct0` will result in **226 error** ("looks like automated behavior"). You MUST obtain the complete Cookie header string from the user's browser.
+
 ### Step 0: Check if already authenticated
 
 ```bash
@@ -125,7 +127,7 @@ If failed, ask the user to re-check their cookie (may have expired or been copie
 | Symptom | Agent action |
 |---------|-------------|
 | `x me` returns error | Cookie expired — guide user to re-extract |
-| Read works, write returns 226 | Need full cookies — ask user for complete Cookie header from Network tab |
+| Read works, write returns 226 | **Full cookies missing** — this is the #1 cause. Ask user for complete Cookie header from browser Network tab and set `extra_cookies` field |
 | `ct0` not found in cookie | OK — tool auto-generates one |
 | User says "I changed my password" | All old cookies invalidated — guide re-extraction |
 
@@ -135,7 +137,7 @@ If failed, ask the user to re-check their cookie (may have expired or been copie
 {
   "auth_token": "40-char hex (REQUIRED)",
   "ct0": "csrf token (auto-generated if empty)",
-  "extra_cookies": "full cookie string (recommended for write ops)"
+  "extra_cookies": "full cookie string (REQUIRED for write ops — without this, posting/replying/quoting will fail with 226)"
 }
 ```
 
