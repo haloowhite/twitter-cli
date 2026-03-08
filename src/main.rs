@@ -1,6 +1,7 @@
 mod api;
 mod auth;
 mod commands;
+mod output;
 mod utils;
 
 use anyhow::Result;
@@ -205,7 +206,18 @@ async fn main() -> Result<()> {
                     } else {
                         client.get_tweet_detail(&tweet_id).await?
                     };
-                    println!("{}", serde_json::to_string_pretty(&resp)?);
+                    if context {
+                        let tweets = output::extract_tweets(&resp);
+                        println!("{}", serde_json::to_string_pretty(&tweets)?);
+                    } else {
+                        match output::extract_single_tweet(&resp) {
+                            Some(t) => println!("{}", serde_json::to_string_pretty(&t)?),
+                            None => {
+                                eprintln!("Warning: could not extract tweet, printing raw response");
+                                println!("{}", serde_json::to_string_pretty(&resp)?);
+                            }
+                        }
+                    }
                 }
                 Commands::Post { text } => {
                     commands::post::post(&client, &text).await?;
