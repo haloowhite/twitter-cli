@@ -288,6 +288,10 @@ impl TwitterClient {
             let mut headers = build_headers(&self.creds.ct0);
             let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0, self.creds.extra_cookies.as_deref());
 
+            headers.insert("origin", rquest::header::HeaderValue::from_static("https://x.com"));
+            headers.insert("referer", rquest::header::HeaderValue::from_static("https://x.com/compose/post"));
+            headers.insert("priority", rquest::header::HeaderValue::from_static("u=1, i"));
+
             if let Some(tid) = self.get_transaction_id("POST", url) {
                 headers.insert(
                     "x-client-transaction-id",
@@ -331,9 +335,12 @@ impl TwitterClient {
             let mut req = self
                 .http_plain
                 .post(url)
-                .header("authority", "twitter.com")
+                .header("authority", "x.com")
                 .header("accept", "*/*")
                 .header("authorization", BEARER_TOKEN)
+                .header("origin", "https://x.com")
+                .header("referer", "https://x.com/compose/post")
+                .header("priority", "u=1, i")
                 .header("x-twitter-active-user", "yes")
                 .header("x-twitter-auth-type", "OAuth2Session")
                 .header("x-twitter-client-language", "en")
@@ -370,6 +377,8 @@ impl TwitterClient {
     async fn rest_post(&self, url: &str, form: &[(&str, &str)]) -> Result<Value> {
         let mut headers = build_headers(&self.creds.ct0);
         let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0, self.creds.extra_cookies.as_deref());
+        headers.insert("origin", rquest::header::HeaderValue::from_static("https://x.com"));
+        headers.insert("referer", rquest::header::HeaderValue::from_static("https://x.com/"));
 
         if let Some(tid) = self.get_transaction_id("POST", url) {
             headers.insert(
