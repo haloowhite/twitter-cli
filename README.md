@@ -6,18 +6,40 @@ X (Twitter) 命令行工具，使用 Rust 编写，编译为单二进制文件 `
 
 ## 安装
 
-### 方式一：下载预编译二进制（推荐）
+### 方式一：一键安装（推荐）
 
-从 [GitHub Releases](https://github.com/haloowhite/twitter-cli/releases) 下载：
+自动检测系统和架构，下载对应二进制：
 
 ```bash
-# macOS (Apple Silicon)
-curl -L https://github.com/haloowhite/twitter-cli/releases/latest/download/x-macos-arm64 -o x
-chmod +x x
+curl -fsSL https://raw.githubusercontent.com/haloowhite/twitter-cli/main/install.sh | bash
+```
+
+自定义安装目录：
+
+```bash
+INSTALL_DIR=~/bin curl -fsSL https://raw.githubusercontent.com/haloowhite/twitter-cli/main/install.sh | bash
+```
+
+### 方式二：手动下载
+
+从 [GitHub Releases](https://github.com/haloowhite/twitter-cli/releases) 下载对应平台的包：
+
+| 平台 | 文件 |
+|------|------|
+| Linux x86_64 | `x-linux-amd64.tar.gz` |
+| Linux ARM64 | `x-linux-arm64.tar.gz` |
+| macOS Intel | `x-darwin-amd64.tar.gz` |
+| macOS Apple Silicon | `x-darwin-arm64.tar.gz` |
+
+```bash
+# 示例：Linux x86_64
+curl -fsSL https://github.com/haloowhite/twitter-cli/releases/latest/download/x-linux-amd64.tar.gz | tar xz
 sudo mv x /usr/local/bin/
 ```
 
-### 方式二：从源码编译
+### 方式三：从源码编译
+
+需要 [Rust 工具链](https://rustup.rs/)：
 
 ```bash
 git clone https://github.com/haloowhite/twitter-cli.git
@@ -81,6 +103,7 @@ x auth --token "你的auth_token"
 ```bash
 x me                                    # 当前用户
 x user elonmusk                         # 查看用户
+x timeline --limit 20                   # 首页时间线
 x tweets elonmusk --limit 50            # 用户推文
 x replies elonmusk --limit 20           # 用户回复
 x followers elonmusk --limit 100        # 粉丝列表
@@ -88,6 +111,16 @@ x following elonmusk --limit 100        # 关注列表
 x search "rust lang" --limit 30         # 搜索推文
 x detail 1234567890                     # 推文详情
 x detail 1234567890 --context           # 含对话上下文
+```
+
+### 紧凑模式
+
+加 `-c` 减少输出，只保留关键字段（适合 LLM / 管道处理）：
+
+```bash
+x -c timeline                           # 紧凑时间线
+x -c tweets elonmusk --limit 10         # 紧凑推文
+x -c search "AI" --limit 20             # 紧凑搜索
 ```
 
 ### 写操作
