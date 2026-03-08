@@ -139,14 +139,14 @@ enum Commands {
 
     /// Follow a user
     Follow {
-        /// User ID
-        user_id: String,
+        /// Screen name or user ID
+        user: String,
     },
 
     /// Unfollow a user
     Unfollow {
-        /// User ID
-        user_id: String,
+        /// Screen name or user ID
+        user: String,
     },
 
     /// Look up user by screen name
@@ -228,11 +228,13 @@ async fn main() -> Result<()> {
                 Commands::Unretweet { tweet_id } => {
                     commands::interact::unretweet(&client, &tweet_id).await?;
                 }
-                Commands::Follow { user_id } => {
-                    commands::users::follow(&client, &user_id).await?;
+                Commands::Follow { user } => {
+                    let uid = client.resolve_user_id(&user).await?;
+                    commands::users::follow(&client, &uid).await?;
                 }
-                Commands::Unfollow { user_id } => {
-                    commands::users::unfollow(&client, &user_id).await?;
+                Commands::Unfollow { user } => {
+                    let uid = client.resolve_user_id(&user).await?;
+                    commands::users::unfollow(&client, &uid).await?;
                 }
                 Commands::User { screen_name } => {
                     commands::users::lookup_user(&client, &screen_name).await?;
