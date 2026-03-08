@@ -29,6 +29,8 @@ pub const CREATE_RETWEET: &str =
     "https://x.com/i/api/graphql/mbRO74GrOvSfRcJnlMapnQ/CreateRetweet";
 pub const DELETE_RETWEET: &str =
     "https://x.com/i/api/graphql/ZyZigVsNiFO6v1dEks1eWg/DeleteRetweet";
+pub const DELETE_TWEET: &str =
+    "https://x.com/i/api/graphql/VaenaVgh5q5ih7kvyVjgtg/DeleteTweet";
 pub const CREATE_FRIENDSHIP: &str = "https://x.com/i/api/1.1/friendships/create.json";
 pub const DESTROY_FRIENDSHIP: &str = "https://x.com/i/api/1.1/friendships/destroy.json";
 

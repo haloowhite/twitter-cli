@@ -687,6 +687,14 @@ impl TwitterClient {
         self.graphql_post(endpoints::DELETE_RETWEET, body).await
     }
 
+    pub async fn delete_tweet(&self, tweet_id: &str) -> Result<Value> {
+        let body = json!({
+            "variables": {"tweet_id": tweet_id, "dark_request": false},
+            "queryId": "VaenaVgh5q5ih7kvyVjgtg",
+        });
+        self.graphql_post(endpoints::DELETE_TWEET, body).await
+    }
+
     pub async fn follow_user(&self, user_id: &str) -> Result<Value> {
         self.rest_post(
             endpoints::CREATE_FRIENDSHIP,

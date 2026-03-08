@@ -32,6 +32,22 @@ enum Commands {
         /// Provide auth_token directly
         #[arg(long)]
         token: Option<String>,
+
+        /// Login with username and password
+        #[arg(long)]
+        login: bool,
+
+        /// Username for --login (reads from stdin if omitted)
+        #[arg(long, requires = "login")]
+        username: Option<String>,
+
+        /// Password for --login (reads from stdin if omitted)
+        #[arg(long, requires = "login")]
+        password: Option<String>,
+
+        /// 2FA/TOTP code for --login
+        #[arg(long, alias = "2fa", requires = "login")]
+        totp: Option<String>,
     },
 
     /// Get home timeline (For You / Following)
@@ -149,6 +165,12 @@ enum Commands {
         tweet_id: String,
     },
 
+    /// Delete a tweet
+    Delete {
+        /// Tweet ID
+        tweet_id: String,
+    },
+
     /// Follow a user
     Follow {
         /// Screen name or user ID
@@ -176,13 +198,27 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Auth { browser, token } => {
+        Commands::Auth {
+            browser,
+            token,
+            login,
+            username,
+            password,
+            totp,
+        } => {
             if let Some(browser) = browser {
                 commands::auth::run_auth_browser(&browser)?;
             } else if let Some(token) = token {
                 commands::auth::run_auth_token(&token)?;
+            } else if login {
+                commands::auth::run_auth_login(
+                    username.as_deref(),
+                    password.as_deref(),
+                    totp.as_deref(),
+                )
+                .await?;
             } else {
-                anyhow::bail!("Provide --browser or --token");
+                anyhow::bail!("Provide --browser, --token, or --login");
             }
         }
 
@@ -259,6 +295,9 @@ async fn main() -> Result<()> {
                 }
                 Commands::Unretweet { tweet_id } => {
                     commands::interact::unretweet(&client, &tweet_id).await?;
+                }
+                Commands::Delete { tweet_id } => {
+                    commands::interact::delete(&client, &tweet_id).await?;
                 }
                 Commands::Follow { user } => {
                     let uid = client.resolve_user_id(&user).await?;

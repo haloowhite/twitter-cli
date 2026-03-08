@@ -29,3 +29,10 @@ pub async fn unretweet(client: &TwitterClient, tweet_id: &str) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
 }
+
+pub async fn delete(client: &TwitterClient, tweet_id: &str) -> Result<()> {
+    let resp = client.delete_tweet(tweet_id).await?;
+    let result = output::extract_action_result(&resp, "delete");
+    println!("{}", serde_json::to_string_pretty(&result)?);
+    Ok(())
+}

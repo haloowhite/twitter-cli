@@ -416,6 +416,10 @@ pub fn extract_action_result(resp: &Value, action: &str) -> ActionResult {
             let done = resp["data"]["unretweet"].get("source_tweet_results").is_some();
             ActionResult { success: done, action: "unretweet".into(), id: None }
         }
+        "delete" => {
+            let done = resp["data"]["delete_tweet"].get("tweet_results").is_some();
+            ActionResult { success: done, action: "delete".into(), id: None }
+        }
         "follow" | "unfollow" => {
             // REST v1.1 returns user object directly with "id" or "id_str"
             let id = opt_str(resp, &["id_str"]);
