@@ -15,8 +15,10 @@ pub fn extract_cookies_from_browser(browser: &str) -> Result<Credentials> {
         "chrome" => rookie::chrome(Some(domains)),
         "firefox" => rookie::firefox(Some(domains)),
         "edge" => rookie::edge(Some(domains)),
+        #[cfg(target_os = "macos")]
         "safari" => rookie::safari(Some(domains)),
-        _ => anyhow::bail!("Unsupported browser: {browser}. Use: chrome, firefox, edge, safari"),
+        _ => anyhow::bail!("Unsupported browser: {browser}. Use: chrome, firefox, edge{}",
+            if cfg!(target_os = "macos") { ", safari" } else { "" }),
     }
     .map_err(|e| anyhow::anyhow!("Failed to extract cookies from {browser}: {e}"))?;
 
