@@ -17,4 +17,6 @@ pub struct ApiErrorEntry {
 pub struct Credentials {
     pub auth_token: String,
     pub ct0: String,
+    #[serde(default)]
+    pub extra_cookies: Option<String>,
 }

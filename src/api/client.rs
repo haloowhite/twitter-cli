@@ -90,7 +90,7 @@ impl TwitterClient {
         let max_retries = 5;
         for attempt in 0..max_retries {
             let mut headers = build_headers(&self.creds.ct0);
-            let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0);
+            let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0, self.creds.extra_cookies.as_deref());
 
             if let Some(tid) = self.get_transaction_id("GET", url) {
                 headers.insert(
@@ -141,7 +141,7 @@ impl TwitterClient {
         url: &str,
         params: &[(&str, String)],
     ) -> Result<Option<String>> {
-        let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0);
+        let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0, self.creds.extra_cookies.as_deref());
 
         let mut req = self
             .http_plain
@@ -286,7 +286,7 @@ impl TwitterClient {
         let max_retries = 3;
         for attempt in 0..max_retries {
             let mut headers = build_headers(&self.creds.ct0);
-            let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0);
+            let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0, self.creds.extra_cookies.as_deref());
 
             if let Some(tid) = self.get_transaction_id("POST", url) {
                 headers.insert(
@@ -324,7 +324,7 @@ impl TwitterClient {
     }
 
     async fn graphql_post_plain(&self, url: &str, body: &Value) -> Result<Option<String>> {
-        let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0);
+        let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0, self.creds.extra_cookies.as_deref());
         let max_retries = 3;
 
         for attempt in 0..max_retries {
@@ -369,7 +369,7 @@ impl TwitterClient {
 
     async fn rest_post(&self, url: &str, form: &[(&str, &str)]) -> Result<Value> {
         let mut headers = build_headers(&self.creds.ct0);
-        let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0);
+        let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0, self.creds.extra_cookies.as_deref());
 
         if let Some(tid) = self.get_transaction_id("POST", url) {
             headers.insert(
@@ -593,12 +593,12 @@ impl TwitterClient {
     ) -> Result<Value> {
         let mut variables = json!({
             "tweet_text": text,
-            "dark_request": false,
             "media": {
                 "media_entities": [],
                 "possibly_sensitive": false,
             },
             "semantic_annotation_ids": [],
+            "disallowed_reply_options": null,
         });
 
         if let Some(reply_id) = reply_to {
@@ -678,7 +678,7 @@ impl TwitterClient {
 
     pub async fn get_me(&self) -> Result<Value> {
         let headers = build_headers(&self.creds.ct0);
-        let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0);
+        let cookie = build_cookie_header(&self.creds.auth_token, &self.creds.ct0, self.creds.extra_cookies.as_deref());
 
         let resp = self
             .http

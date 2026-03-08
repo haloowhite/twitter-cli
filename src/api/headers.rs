@@ -67,6 +67,10 @@ pub fn build_headers(csrf_token: &str) -> HeaderMap {
     headers
 }
 
-pub fn build_cookie_header(auth_token: &str, csrf_token: &str) -> String {
-    format!("auth_token={auth_token}; ct0={csrf_token}")
+pub fn build_cookie_header(auth_token: &str, csrf_token: &str, extra_cookies: Option<&str>) -> String {
+    let base = format!("auth_token={auth_token}; ct0={csrf_token}");
+    match extra_cookies {
+        Some(extra) if !extra.is_empty() => format!("{base}; {extra}"),
+        _ => base,
+    }
 }

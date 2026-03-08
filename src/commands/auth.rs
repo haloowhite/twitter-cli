@@ -16,6 +16,7 @@ pub fn run_auth_token(token: &str) -> Result<()> {
     let creds = Credentials {
         auth_token: token.to_string(),
         ct0: generate_csrf_token(),
+        extra_cookies: None,
     };
     save_credentials(&creds)?;
     eprintln!("Credentials saved with provided auth_token.");

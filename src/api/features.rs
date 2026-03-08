@@ -1,13 +1,13 @@
 use serde_json::{json, Value};
 
-/// Unified features used by all Twitter GraphQL endpoints (as of 2026-03-07).
-/// Twitter now requires the same feature set for all query endpoints.
+/// Unified features used by all Twitter GraphQL endpoints (as of 2026-03-08).
+/// Captured from browser network traffic.
 pub fn features() -> Value {
     json!({
         "rweb_video_screen_enabled": false,
         "profile_label_improvements_pcf_label_in_post_enabled": true,
         "responsive_web_profile_redirect_enabled": false,
-        "rweb_tipjar_consumption_enabled": true,
+        "rweb_tipjar_consumption_enabled": false,
         "verified_phone_label_enabled": false,
         "creator_subscriptions_tweet_preview_api_enabled": true,
         "responsive_web_graphql_timeline_navigation_enabled": true,
@@ -19,7 +19,7 @@ pub fn features() -> Value {
         "responsive_web_grok_analyze_post_followups_enabled": true,
         "responsive_web_jetfuel_frame": true,
         "responsive_web_grok_share_attachment_enabled": true,
-        "responsive_web_grok_annotations_enabled": false,
+        "responsive_web_grok_annotations_enabled": true,
         "articles_preview_enabled": true,
         "responsive_web_edit_tweet_api_enabled": true,
         "graphql_is_translatable_rweb_tweet_is_translatable_enabled": true,
@@ -36,13 +36,11 @@ pub fn features() -> Value {
         "standardized_nudges_misinfo": true,
         "tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": true,
         "longform_notetweets_rich_text_read_enabled": true,
-        "longform_notetweets_inline_media_enabled": true,
+        "longform_notetweets_inline_media_enabled": false,
         "responsive_web_grok_image_annotation_enabled": true,
         "responsive_web_grok_imagine_annotation_enabled": true,
         "responsive_web_grok_community_note_auto_translation_is_enabled": false,
         "responsive_web_enhance_cards_enabled": false,
-        "creator_subscriptions_quote_tweet_preview_enabled": false,
-        "payments_enabled": false,
     })
 }
 

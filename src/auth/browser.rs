@@ -34,7 +34,7 @@ pub fn extract_cookies_from_browser(browser: &str) -> Result<Credentials> {
     let auth_token = auth_token.context("auth_token cookie not found. Are you logged in to X?")?;
     let ct0 = ct0.unwrap_or_else(generate_csrf_token);
 
-    Ok(Credentials { auth_token, ct0 })
+    Ok(Credentials { auth_token, ct0, extra_cookies: None })
 }
 
 /// Generate a random csrf token (same logic as heimdall).
